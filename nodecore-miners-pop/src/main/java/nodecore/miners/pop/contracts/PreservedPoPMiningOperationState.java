@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Set;
 
 public class PreservedPoPMiningOperationState implements Serializable {
+    public long fee;
+
     public String operationId;
 
     public PoPMiningOperationStatus status;

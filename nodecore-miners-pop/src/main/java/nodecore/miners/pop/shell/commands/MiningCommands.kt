@@ -24,6 +24,23 @@ fun Shell.miningCommands(
     miner: PoPMiner,
     prettyPrintGson: Gson
 ) {
+
+    command(
+            name = "Stop",
+            form = "stop",
+            description = "Suspends miner"
+            ) {
+        miner.setStopped(true).toShellResult()
+    }
+
+    command(
+            name = "Resume",
+            form = "resume",
+            description = "Reactivates mining"
+    ) {
+        miner.setStopped(false).toShellResult()
+    }
+
     command(
         name = "Mine",
         form = "mine",

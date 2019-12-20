@@ -13,13 +13,15 @@ import io.ktor.response.respond
 import io.ktor.routing.Route
 import io.ktor.routing.get
 import io.ktor.routing.post
+import nodecore.miners.pop.Configuration
 import nodecore.miners.pop.PoPMiner
 import nodecore.miners.pop.api.model.MineRequestPayload
 import nodecore.miners.pop.api.model.MinerInfoResponse
 import nodecore.miners.pop.api.model.toResponse
 
 class MiningController(
-    private val miner: PoPMiner
+    private val miner: PoPMiner,
+    private val configuration: Configuration
 ) : ApiController {
 
     override fun Route.registerApi() {
@@ -43,6 +45,19 @@ class MiningController(
             val payload: MineRequestPayload = call.receive()
 
             val result = miner.mine(payload.block)
+
+            val responseModel = result.toResponse()
+            call.respond(responseModel)
+        }
+        get("/mine{blockNo,fee}") {
+            val block = call.parameters["blockNo"]!!
+            val fee = call.parameters["fee"]
+
+            fee?.let {
+                configuration.setTransactionFeePerKB(fee)
+            }
+
+            val result = miner.mine(block.toInt())
 
             val responseModel = result.toResponse()
             call.respond(responseModel)
