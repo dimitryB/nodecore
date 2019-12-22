@@ -29,11 +29,26 @@ class PoPDataResponse(
 )
 
 class OperationSummaryResponse(
-    val operationId: String?,
-    val endorsedBlockNumber: Int,
-    val state: String?,
-    val action: String?,
-    val message: String?
+        val operationId: String?,
+        val endorsedBlockNumber: Int,
+        val state: String?,
+        val action: String?,
+        val message: String?
+)
+
+class OperationStatusResponse(
+        var currentAction: String?,
+        var btcTransactionId: String,
+        val endorsedBlockNumber: Int?,
+        val status: String?
+)
+
+class OperationFeeResponse (
+        var endorsedBlockNumber: String,
+        var state: String,
+        var operationId: String,
+        var action: String,
+        var fee: Long
 )
 
 open class ResultResponse(
@@ -58,5 +73,5 @@ class MinerInfoResponse(
     val minerAddress: String?,
     val bitcoinAddress: String?,
     val bitcoinBalance: Long?,
-    val walletSeed: List<String>?
+    val isReady: Boolean
 )

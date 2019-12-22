@@ -602,9 +602,9 @@ public class PoPMiner implements Runnable {
         Result result = new Result();
         this.stopped = stopped;
         if(stopped) {
-            result.addMessage("V200", "Success", "Mining was resumed", false);
-        } else {
             result.addMessage("V200", "Success", "Mining was suspended", false);
+        } else {
+            result.addMessage("V200", "Success", "Mining was resumed", false);
         }
 
         return result;
