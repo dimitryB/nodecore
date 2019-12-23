@@ -4,6 +4,7 @@ plugins {
     id "idea"
     id "application"
     id "com.google.protobuf"
+    id "com.github.johnrengelman.shadow" version "4.0.2"
 }
 
 configurations.all {

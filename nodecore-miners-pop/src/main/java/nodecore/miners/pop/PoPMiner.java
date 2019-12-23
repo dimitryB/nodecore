@@ -82,6 +82,9 @@ public class PoPMiner implements Runnable {
     private final KeyValueRepository keyValueRepository;
     private final ProcessManager processManager;
 
+    private boolean stopped = false;
+    private boolean autoStopped = false;
+
     private boolean stateRestored;
     private EnumSet<PoPMinerDependencies> readyConditions;
 
@@ -138,7 +141,11 @@ public class PoPMiner implements Runnable {
     }
 
     public boolean isReady() {
-        return PoPMinerDependencies.SATISFIED.equals(readyConditions);
+        if(!isStopped() && !isAutoStopped()) {
+            return PoPMinerDependencies.SATISFIED.equals(readyConditions);
+        } else {
+            return false;
+        }
     }
 
     public List<OperationSummary> listOperations() {
@@ -154,7 +161,8 @@ public class PoPMiner implements Runnable {
             }
             String status = state.getStatus() != null ? state.getStatus().toString() : "";
 
-            return new OperationSummary(state.getOperationId(), blockNumber, status, state.getCurrentActionAsString(), state.getMessage());
+            return new OperationSummary(state.getOperationId(), blockNumber, status,
+                    state.getCurrentActionAsString(), state.getMessage(), state.getFee());
         }).filter(Objects::nonNull).sorted(Comparator.comparingInt(OperationSummary::getEndorsedBlockNumber)).collect(Collectors.toList());
     }
 
@@ -205,7 +213,9 @@ public class PoPMiner implements Runnable {
         }
 
         String operationId = Utility.generateOperationId();
-        PoPMiningOperationState state = new PoPMiningOperationState(operationId, blockNumber);
+        long fee = configuration.getTransactionFeePerKB();
+
+        PoPMiningOperationState state = new PoPMiningOperationState(operationId, blockNumber, fee);
         operations.putIfAbsent(operationId, state);
 
         processManager.submit(state);
@@ -581,5 +591,30 @@ public class PoPMiner implements Runnable {
                 operationState.fail(String.format("Endorsement of block %d is no longer relevant", operationState.getBlockNumber()));
             }
         }
+    }
+
+    public boolean isStopped() {
+        return stopped;
+    }
+
+    public Result setStopped(boolean stopped) {
+
+        Result result = new Result();
+        this.stopped = stopped;
+        if(stopped) {
+            result.addMessage("V200", "Success", "Mining was suspended", false);
+        } else {
+            result.addMessage("V200", "Success", "Mining was resumed", false);
+        }
+
+        return result;
+    }
+
+    public boolean isAutoStopped() {
+        return autoStopped;
+    }
+
+    public void setAutoStopped(boolean autoStopped) {
+        this.autoStopped = autoStopped;
     }
 }

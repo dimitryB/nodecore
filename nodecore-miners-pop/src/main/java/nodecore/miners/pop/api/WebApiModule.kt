@@ -8,7 +8,7 @@ import org.koin.dsl.module
 @JvmField
 val webApiModule = module {
     single { ConfigurationController(get()) }
-    single { MiningController(get()) }
+    single { MiningController(get(), get(), get()) }
     single { WalletController(get()) }
 
     single {

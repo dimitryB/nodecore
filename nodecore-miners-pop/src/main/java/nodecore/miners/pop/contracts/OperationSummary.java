@@ -38,7 +38,14 @@ public class OperationSummary {
         return message;
     }
 
-    public OperationSummary(String operationId, int endorsedBlockNumber, String state, String action, String message) {
+    private final long fee;
+
+    public long getFee() {
+        return fee;
+    }
+
+    public OperationSummary(String operationId, int endorsedBlockNumber, String state, String action, String message, long fee) {
+        this.fee=fee;
         this.operationId = operationId;
         this.endorsedBlockNumber = endorsedBlockNumber;
         this.state = state;

@@ -32,6 +32,7 @@ import java.util.stream.Collectors;
 
 public class PoPMiningOperationState {
     private static final Logger logger = LoggerFactory.getLogger(PoPMiningOperationState.class);
+    private long fee=0;
 
     public enum Action {
         READY,
@@ -49,9 +50,10 @@ public class PoPMiningOperationState {
         this.operationId = operationId;
     }
 
-    public PoPMiningOperationState(String operationId, Integer blockNumber) {
+    public PoPMiningOperationState(String operationId, Integer blockNumber, long fee) {
         this.operationId = operationId;
         this.blockNumber = blockNumber;
+        this.fee=fee;
     }
 
     public boolean isCompleted() {
@@ -283,12 +285,17 @@ public class PoPMiningOperationState {
         blockNumber = value;
     }
 
-    private PoPMiningOperationStatus status;
-
-    public PoPMiningOperationStatus getStatus() {
-        return status;
+    public long getFee() {
+        return fee;
     }
 
+    public void setFee(long fee) {
+        this.fee = fee;
+    }
+
+    private PoPMiningOperationStatus status;
+    
+    public PoPMiningOperationStatus getStatus() { return status; }
     private String setStatus(PoPMiningOperationStatus value) {
         if (value != null && !value.equals(status)) {
             status = value;
@@ -459,6 +466,7 @@ public class PoPMiningOperationState {
     }
 
     public static class PoPMiningOperationStateBuilder {
+        private long fee_;
         private String operationId_;
         private PoPMiningOperationStatus status_;
         private PoPMiningOperationState.Action currentAction_;
@@ -475,6 +483,11 @@ public class PoPMiningOperationState {
 
         public PoPMiningOperationStateBuilder setOperationId(String value) {
             operationId_ = value;
+            return this;
+        }
+
+        public PoPMiningOperationStateBuilder setFee(long value) {
+            fee_ = value;
             return this;
         }
 
@@ -599,6 +612,7 @@ public class PoPMiningOperationState {
 
         public PoPMiningOperationState build() {
             PoPMiningOperationState state = new PoPMiningOperationState(operationId_);
+            state.setFee(fee_);
             state.setStatus(status_);
             state.setCurrentAction(currentAction_);
             state.setBlockNumber(blockNumber_);

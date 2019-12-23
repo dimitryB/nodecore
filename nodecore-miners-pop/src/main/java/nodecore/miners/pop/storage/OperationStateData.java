@@ -33,4 +33,6 @@ public class OperationStateData {
     public boolean isDone;
     @DatabaseField(columnName = "last_updated", index = true)
     public int lastUpdated;
+    @DatabaseField(columnName = "fee")
+    public int fee;
 }
