@@ -141,9 +141,7 @@ public final class BitcoinService implements BlocksDownloadedEventListener {
     private WalletAppKit createWalletAppKit(Context context, String filePrefix, DeterministicSeed seed) {
         isBlockchainDownloaded = false;
 
-        BitcoinService self = this;
-
-        WalletAppKit kit = new WalletAppKit(context, new File("."), filePrefix) {
+        WalletAppKit kit = new WalletAppKit(context.getParams(), Script.ScriptType.P2WPKH, null, new File("."), filePrefix) {
             @Override
             protected void onSetupCompleted() {
                 super.onSetupCompleted();
@@ -157,7 +155,7 @@ public final class BitcoinService implements BlocksDownloadedEventListener {
                 wallet.addCoinsReceivedEventListener((wallet, tx, prevBalance, newBalance) -> InternalEventBus.getInstance()
                         .post(new CoinsReceivedEvent(tx, prevBalance, newBalance)));
 
-                peerGroup.addBlocksDownloadedEventListener(self);
+                peerGroup.addBlocksDownloadedEventListener(BitcoinService.this);
 
                 setServiceReady(true);
             }
@@ -348,31 +346,36 @@ public final class BitcoinService implements BlocksDownloadedEventListener {
     }
 
     public Block downloadBlock(Sha256Hash hash) {
-        logger.info("Attempting to download block with hash {}", hash.toString());
+        int attempts = 0;
+        Block block = null;
+        while (block == null && attempts < 5) {
+            logger.info("Attempting to download block with hash {}", hash.toString());
+            attempts++;
 
-        ListenableFuture<Block> blockFuture;
-        // Lock for read to see if we've got a download already started
-        synchronized (downloadLock) {
-            blockFuture = blockDownloader.get(hash.toString());
-            if (blockFuture == null) {
-                logger.info("Starting download of block {} from peer group", hash.toString());
-                blockFuture = peerGroup.getDownloadPeer().getBlock(hash);
-                blockDownloader.putIfAbsent(hash.toString(), blockFuture);
-            } else {
-                logger.info("Found existing download of block {}", hash.toString());
+            ListenableFuture<Block> blockFuture;
+            // Lock for read to see if we've got a download already started
+            synchronized (downloadLock) {
+                blockFuture = blockDownloader.get(hash.toString());
+                if (blockFuture == null) {
+                    logger.info("Starting download of block {} from peer group", hash.toString());
+                    blockFuture = peerGroup.getDownloadPeer().getBlock(hash);
+                    blockDownloader.putIfAbsent(hash.toString(), blockFuture);
+                } else {
+                    logger.info("Found existing download of block {}", hash.toString());
+                }
+            }
+
+            try {
+                logger.info("Waiting for block {} to finish downloading", hash.toString());
+                block = blockFuture.get(configuration.getActionTimeout(), TimeUnit.SECONDS);
+            } catch (TimeoutException | InterruptedException | ExecutionException e) {
+                logger.error("Unable to download Bitcoin block at the #{} attempt: {}", attempts, e.getMessage());
+                blockDownloader.remove(hash.toString());
             }
         }
 
-        Block block = null;
-        try {
-            logger.info("Waiting for block {} to finish downloading", hash.toString());
-            block = blockFuture.get(configuration.getActionTimeout(), TimeUnit.SECONDS);
-        } catch (TimeoutException | InterruptedException | ExecutionException e) {
-            logger.error("Unable to download Bitcoin block", e);
-        }
-
         if (block != null) {
-            logger.info("Finished downloading block with hash {}", hash.toString());
+            logger.info("Finished downloading block with hash {} at the #{} attempt", hash.toString(), attempts);
         }
 
         return block;
@@ -402,11 +405,11 @@ public final class BitcoinService implements BlocksDownloadedEventListener {
         Transaction rawTx = serializer.makeTransaction(raw);
 
         // Try to get the transaction from the wallet first
-        Transaction reconstitutedTx = wallet.getTransaction(rawTx.getHash());
+        Transaction reconstitutedTx = wallet.getTransaction(rawTx.getTxId());
         if (reconstitutedTx == null) {
-            logger.debug("Could not find transaction {} in wallet", rawTx.getHashAsString());
+            logger.debug("Could not find transaction {} in wallet", rawTx.getTxId().toString());
             try {
-                reconstitutedTx = peerGroup.getDownloadPeer().getPeerMempoolTransaction(rawTx.getHash()).get();
+                reconstitutedTx = peerGroup.getDownloadPeer().getPeerMempoolTransaction(rawTx.getTxId()).get();
             } catch (Exception e) {
                 logger.error("Unable to download mempool transaction", e);
             }
@@ -418,7 +421,7 @@ public final class BitcoinService implements BlocksDownloadedEventListener {
     public Transaction sendCoins(String address, Coin amount) throws SendTransactionException {
         try {
             return sendTxRequest(() -> {
-                SendRequest sendRequest = SendRequest.to(Address.fromBase58(kit.params(), address), amount);
+                SendRequest sendRequest = SendRequest.to(Address.fromString(kit.params(), address), amount);
                 sendRequest.changeAddress = wallet.currentChangeAddress();
                 sendRequest.feePerKb = getTransactionFeePerKB();
 
@@ -509,6 +512,7 @@ public final class BitcoinService implements BlocksDownloadedEventListener {
         return filePrefix;
     }
 
+    @Override
     public void onBlocksDownloaded(Peer peer, Block block, @Nullable FilteredBlock filteredBlock, int blocksLeft) {
         if (filteredBlock != null) {
             logger.debug("FilteredBlock {} downloaded", block.getHashAsString());
@@ -532,7 +536,7 @@ public final class BitcoinService implements BlocksDownloadedEventListener {
             if (request.tx.getFee().isGreaterThan(getMaximumTransactionFee())) {
                 throw new ExceededMaxTransactionFee();
             }
-            if (txBroadcastAudit.containsKey(request.tx.getHashAsString())) {
+            if (txBroadcastAudit.containsKey(request.tx.getTxId().toString())) {
                 throw new DuplicateTransactionException();
             }
 
@@ -549,9 +553,10 @@ public final class BitcoinService implements BlocksDownloadedEventListener {
         // Broadcast the transaction to the network peer group
         // BitcoinJ adds a listener that will commit the transaction to the wallet when a
         // sufficient number of peers have announced receipt
-        logger.info("Broadcasting tx {} to peer group", request.tx.getHashAsString());
+        logger.info("Broadcasting tx {} to peer group", request.tx.getTxId());
+        logger.info("tx fee: {}", request.tx.getFee());
         TransactionBroadcast broadcast = kit.peerGroup().broadcastTransaction(request.tx);
-        txBroadcastAudit.put(request.tx.getHashAsString(), EMPTY_OBJECT);
+        txBroadcastAudit.put(request.tx.getTxId().toString(), EMPTY_OBJECT);
 
         // Add a callback that releases the semaphore permit
         Futures.addCallback(broadcast.future(), new FutureCallback<Transaction>() {
@@ -566,7 +571,7 @@ public final class BitcoinService implements BlocksDownloadedEventListener {
             }
         }, Threading.TASK_POOL);
 
-        logger.info("Awaiting confirmation of broadcast of Tx {}", request.tx.getHashAsString());
+        logger.info("Awaiting confirmation of broadcast of Tx {}", request.tx.getTxId().toString());
 
         return broadcast.future();
     }

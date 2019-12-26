@@ -13,14 +13,14 @@ import org.bitcoinj.core.Transaction
 
 class PoPMiningTransaction(
     popMiningInstruction: PoPMiningInstruction,
-    bitcoinTransaction: Transaction,
+    bitcoinTransaction: ByteArray,
     bitcoinMerklePathToRoot: String,
     bitcoinBlockHeaderOfProof: Block,
     bitcoinContextBlocks: List<Block>
 ) {
     val endorsedBlockHeader: ByteArray = popMiningInstruction.endorsedBlockHeader
 
-    val bitcoinTransaction: ByteArray = BitcoinTransactionUtility.parseTxIDRelevantBits(bitcoinTransaction.bitcoinSerialize())
+    val bitcoinTransaction: ByteArray = BitcoinTransactionUtility.parseTxIDRelevantBits(bitcoinTransaction)
     val bitcoinMerklePathToRoot: ByteArray = bitcoinMerklePathToRoot.toByteArray()
     val bitcoinBlockHeaderOfProof: ByteArray = Utility.serializeBlock(bitcoinBlockHeaderOfProof)
 
