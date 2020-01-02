@@ -60,6 +60,11 @@ public class PoPStateService {
 
     public PoPMiningOperationState getOperation(String id) {
         OperationStateData stateData = repository.getOperation(id);
+        if(stateData == null) {
+            logger.error("getOperation: Unable to restore operation state {}", id);
+            return null;
+        }
+
         try {
             PoPMiningOperationState state = reconstitute(ProofOfProof.OperationState.parseFrom(stateData.state));
             if (state != null) {
