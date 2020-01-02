@@ -96,6 +96,15 @@ public class Configuration {
         }
     }
 
+    public String[] getBitcoinPeers() {
+        String value = properties.getProperty(Keys.BITCOIN_PEERS);
+        if(value != null) {
+            return value.split(",");
+        }
+
+        return null;
+    }
+
     public long getMaxTransactionFee() {
         String value = getPropertyOverrideOrDefault(Keys.BITCOIN_MAX_TRANSACTION_FEE_KEY);
         Long transactionFee = Longs.tryParse(value);
@@ -541,6 +550,7 @@ public class Configuration {
         private static final String AUTO_MINE_ROUND4 = "auto.mine.round4";
         private static final String HTTP_API_ADDRESS = "http.api.address";
         private static final String HTTP_API_PORT = "http.api.port";
+        private static final String BITCOIN_PEERS = "bitcoin.peers";
 
         private static final String BITCOIN_NETWORK_KEY = "bitcoin.network";
         private static final String BITCOIN_MAX_TRANSACTION_FEE_KEY = "bitcoin.fee.max";
