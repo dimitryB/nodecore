@@ -97,7 +97,6 @@ public class PoPMiningOperationState {
         logger.info("Unfiltered Tx: " + Utility.bytesToHex(transaction.unsafeBitcoinSerialize()));
         logger.info("Filtered Tx: " + Utility.bytesToHex(txBytes));
 
-
         setTransactionBytes(txBytes);
         messages.add("Signed Bitcoin transaction: " + Utility.bytesToHex(txBytes));
 
