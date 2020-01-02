@@ -11,6 +11,7 @@ import io.ktor.application.call
 import io.ktor.http.HttpStatusCode
 import io.ktor.response.respond
 import io.ktor.routing.Route
+import io.ktor.routing.get
 import io.ktor.routing.post
 import mu.KotlinLogging
 import nodecore.miners.pop.InternalEventBus
@@ -30,6 +31,18 @@ class QuitController : ApiController {
             val quitExecutor = Executors.newSingleThreadExecutor()
             quitExecutor.submit {
                 sleep(1000)
+                InternalEventBus.getInstance().post(ProgramQuitEvent(quitReason))
+            }
+
+            call.respond(HttpStatusCode.OK)
+        }
+        get("/quit{reset}") {
+            logger.info("Terminating the miner now")
+            val restart = call.parameters["restart"]?.toBoolean() ?: false
+            val quitReason = if (restart) 1 else 0
+            val quitExecutor = Executors.newSingleThreadExecutor()
+            quitExecutor.submit {
+                sleep(5000)
                 InternalEventBus.getInstance().post(ProgramQuitEvent(quitReason))
             }
 
