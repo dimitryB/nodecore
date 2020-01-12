@@ -48,7 +48,14 @@ public class CreateBitcoinTransactionTask extends BaseTask {
         Script opReturnScript = bitcoinService.generatePoPScript(state.getMiningInstruction().publicationData);
 
         try {
-            ListenableFuture<Transaction> txFuture = bitcoinService.createPoPTransaction(opReturnScript);
+            Transaction tx = bitcoinService.createPoPTransaction(opReturnScript);
+
+            logger.info("Submitted broadcast of transaction {}", tx.getTxId());
+
+            state.onTransactionCreated(tx);
+
+            // TODO: hack
+            /*
             Futures.addCallback(txFuture, new FutureCallback<Transaction>() {
                 @Override
                 public void onSuccess(@Nullable Transaction result) {
@@ -67,6 +74,7 @@ public class CreateBitcoinTransactionTask extends BaseTask {
                     failProcess(state, "A problem occurred broadcasting the transaction to the peer group");
                 }
             }, Threading.TASK_POOL);
+             */
         } catch (ApplicationExceptions.SendTransactionException e) {
             handleSendTransactionExceptions(e, state);
         }

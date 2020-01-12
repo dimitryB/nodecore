@@ -84,7 +84,7 @@ public class PoPMiningOperationState {
     public void onTransactionCreated(Transaction transaction) {
         List<String> messages = new ArrayList<>();
 
-        ExpTransaction exposedTransaction = new ExpTransaction(NetworkParameters.fromID(NetworkParameters.ID_TESTNET), transaction.unsafeBitcoinSerialize());
+        ExpTransaction exposedTransaction = new ExpTransaction(NetworkParameters.fromID(NetworkParameters.ID_MAINNET), transaction.unsafeBitcoinSerialize());
 
         setTransaction(transaction);
 
@@ -229,7 +229,7 @@ public class PoPMiningOperationState {
     public void registerListeners(Transaction transaction) {
         transaction.getConfidence().addEventListener(txConfidenceListener);
 
-        futureDepthListener = transaction.getConfidence().getDepthFuture(20);
+        futureDepthListener = transaction.getConfidence().getDepthFuture(2);
         Futures.addCallback(futureDepthListener, new FutureCallback<TransactionConfidence>() {
             @Override
             public void onSuccess(@Nullable TransactionConfidence result) {

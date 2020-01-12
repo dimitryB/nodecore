@@ -28,6 +28,7 @@ import nodecore.miners.pop.shell.commands.diagnosticCommands
 import nodecore.miners.pop.shell.commands.miningCommands
 import nodecore.miners.pop.shell.commands.standardCommands
 import nodecore.miners.pop.shell.commands.veriBlockWalletCommands
+import org.jline.terminal.Terminal
 import org.jline.utils.AttributedStyle
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory

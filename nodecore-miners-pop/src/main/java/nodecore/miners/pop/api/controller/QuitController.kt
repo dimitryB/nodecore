@@ -36,9 +36,9 @@ class QuitController : ApiController {
 
             call.respond(HttpStatusCode.OK)
         }
-        get("/quit{reset}") {
-            logger.info("Terminating the miner now")
+        get("/quit") {
             val restart = call.parameters["restart"]?.toBoolean() ?: false
+            logger.info("Terminating the miner now {}", restart)
             val quitReason = if (restart) 1 else 0
             val quitExecutor = Executors.newSingleThreadExecutor()
             quitExecutor.submit {

@@ -20,27 +20,10 @@ import nodecore.miners.pop.contracts.ApplicationExceptions.DuplicateTransactionE
 import nodecore.miners.pop.contracts.ApplicationExceptions.ExceededMaxTransactionFee;
 import nodecore.miners.pop.contracts.ApplicationExceptions.SendTransactionException;
 import nodecore.miners.pop.contracts.ApplicationExceptions.UnableToAcquireTransactionLock;
-import nodecore.miners.pop.events.BitcoinServiceNotReadyEvent;
-import nodecore.miners.pop.events.BitcoinServiceReadyEvent;
-import nodecore.miners.pop.events.BlockchainDownloadedEvent;
-import nodecore.miners.pop.events.CoinsReceivedEvent;
-import nodecore.miners.pop.events.InfoMessageEvent;
+import nodecore.miners.pop.events.*;
 import nodecore.miners.pop.shims.WalletShim;
 import org.apache.commons.lang3.tuple.Pair;
-import org.bitcoinj.core.Address;
-import org.bitcoinj.core.BitcoinSerializer;
-import org.bitcoinj.core.Block;
-import org.bitcoinj.core.BlockChain;
-import org.bitcoinj.core.Coin;
-import org.bitcoinj.core.Context;
-import org.bitcoinj.core.FilteredBlock;
-import org.bitcoinj.core.PartialMerkleTree;
-import org.bitcoinj.core.Peer;
-import org.bitcoinj.core.PeerGroup;
-import org.bitcoinj.core.Sha256Hash;
-import org.bitcoinj.core.StoredBlock;
-import org.bitcoinj.core.Transaction;
-import org.bitcoinj.core.TransactionBroadcast;
+import org.bitcoinj.core.*;
 import org.bitcoinj.core.listeners.BlocksDownloadedEventListener;
 import org.bitcoinj.core.listeners.DownloadProgressTracker;
 import org.bitcoinj.crypto.DeterministicKey;
@@ -58,6 +41,9 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 import java.io.File;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -157,9 +143,33 @@ public final class BitcoinService implements BlocksDownloadedEventListener {
 
                 peerGroup.addBlocksDownloadedEventListener(BitcoinService.this);
 
+                blockChain.addNewBestBlockListener(block -> InternalEventBus.getInstance().post(new NewBestBlockEvent(block)));
+
+                peerGroup.setDownloadTxDependencies(-1);
+                peerGroup.setMaxConnections(12);
+
                 setServiceReady(true);
             }
         };
+
+        String addresses[] = configuration.getBitcoinPeers();
+        if(addresses != null) {
+            PeerAddress peerAddresses[] = new PeerAddress[addresses.length];
+            int port = context.getParams().getPort();
+            int i = 0;
+
+            for(String ip:addresses) {
+                try {
+                    PeerAddress peerAddress = new PeerAddress(context.getParams(), InetAddress.getByName(ip), port);
+                    peerAddresses[i++] = peerAddress;
+                    logger.info("Added Peer {}", ip);
+                } catch (UnknownHostException e) {
+                    logger.error("Bad Peer IP {}", ip);
+                }
+            }
+
+            kit.setPeerNodes(peerAddresses);
+        }
 
         kit.setBlockingStartup(false);
         kit.setDownloadListener(new DownloadProgressTracker() {
@@ -262,7 +272,7 @@ public final class BitcoinService implements BlocksDownloadedEventListener {
         return new ScriptBuilder().op(ScriptOpCodes.OP_RETURN).data(opReturnData).build();
     }
 
-    public ListenableFuture<Transaction> createPoPTransaction(Script opReturnScript) throws SendTransactionException {
+    public Transaction createPoPTransaction(Script opReturnScript) throws SendTransactionException {
         return sendTxRequest(() -> {
             Transaction tx = new Transaction(kit.params());
             tx.addOutput(Coin.ZERO, opReturnScript);
@@ -419,17 +429,13 @@ public final class BitcoinService implements BlocksDownloadedEventListener {
     }
 
     public Transaction sendCoins(String address, Coin amount) throws SendTransactionException {
-        try {
-            return sendTxRequest(() -> {
-                SendRequest sendRequest = SendRequest.to(Address.fromString(kit.params(), address), amount);
-                sendRequest.changeAddress = wallet.currentChangeAddress();
-                sendRequest.feePerKb = getTransactionFeePerKB();
+        return sendTxRequest(() -> {
+            SendRequest sendRequest = SendRequest.to(Address.fromString(kit.params(), address), amount);
+            sendRequest.changeAddress = wallet.currentChangeAddress();
+            sendRequest.feePerKb = getTransactionFeePerKB();
 
-                return sendRequest;
-            }).get();
-        } catch (InterruptedException | ExecutionException e) {
-            throw new SendTransactionException(e);
-        }
+            return sendRequest;
+        });
     }
 
     public Pair<Integer, Long> calculateFeesFromLatestBlock() {
@@ -520,12 +526,7 @@ public final class BitcoinService implements BlocksDownloadedEventListener {
         }
     }
 
-    private ListenableFuture<Transaction> sendTxRequest(Supplier<SendRequest> requestBuilder) throws SendTransactionException {
-        try {
-            acquireTxLock();
-        } catch (UnableToAcquireTransactionLock e) {
-            throw new SendTransactionException(e);
-        }
+    private synchronized Transaction sendTxRequest(Supplier<SendRequest> requestBuilder) throws SendTransactionException {
 
         SendRequest request = requestBuilder.get();
         try {
@@ -550,48 +551,36 @@ public final class BitcoinService implements BlocksDownloadedEventListener {
             throw new SendTransactionException(e);
         }
 
-        // Broadcast the transaction to the network peer group
-        // BitcoinJ adds a listener that will commit the transaction to the wallet when a
-        // sufficient number of peers have announced receipt
+// Broadcast the transaction to the network peer group
+// BitcoinJ adds a listener that will commit the transaction to the wallet when a
+// sufficient number of peers have announced receipt
         logger.info("Broadcasting tx {} to peer group", request.tx.getTxId());
         logger.info("tx fee: {}", request.tx.getFee());
+
         TransactionBroadcast broadcast = kit.peerGroup().broadcastTransaction(request.tx);
         txBroadcastAudit.put(request.tx.getTxId().toString(), EMPTY_OBJECT);
 
-        // Add a callback that releases the semaphore permit
-        Futures.addCallback(broadcast.future(), new FutureCallback<Transaction>() {
-            @Override
-            public void onSuccess(@Nullable Transaction result) {
-                releaseTxLock();
-            }
-
-            @Override
-            public void onFailure(Throwable t) {
-                releaseTxLock();
-            }
-        }, Threading.TASK_POOL);
-
         logger.info("Awaiting confirmation of broadcast of Tx {}", request.tx.getTxId().toString());
 
-        return broadcast.future();
+        return request.tx;
     }
 
-    private void acquireTxLock() throws UnableToAcquireTransactionLock {
+private void acquireTxLock() throws UnableToAcquireTransactionLock {
         logger.info("Waiting to acquire lock to create transaction");
         try {
-            boolean permitted = txGate.tryAcquire(10, TimeUnit.SECONDS);
-            if (!permitted) {
-                throw new UnableToAcquireTransactionLock();
-            }
+        boolean permitted = txGate.tryAcquire(17, TimeUnit.SECONDS);
+        if (!permitted) {
+        throw new UnableToAcquireTransactionLock();
+        }
         } catch (InterruptedException e) {
-            throw new UnableToAcquireTransactionLock();
+        throw new UnableToAcquireTransactionLock();
         }
 
         logger.info("Acquired lock to create transaction");
-    }
+        }
 
-    private void releaseTxLock() {
+private void releaseTxLock() {
         logger.info("Releasing create transaction lock");
         txGate.release();
-    }
+        }
 }

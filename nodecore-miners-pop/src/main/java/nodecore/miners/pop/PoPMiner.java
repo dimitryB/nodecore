@@ -23,23 +23,7 @@ import nodecore.miners.pop.contracts.PoPRepository;
 import nodecore.miners.pop.contracts.PreservedPoPMiningOperationState;
 import nodecore.miners.pop.contracts.Result;
 import nodecore.miners.pop.contracts.TransactionStatus;
-import nodecore.miners.pop.events.BitcoinServiceNotReadyEvent;
-import nodecore.miners.pop.events.BitcoinServiceReadyEvent;
-import nodecore.miners.pop.events.BlockchainDownloadedEvent;
-import nodecore.miners.pop.events.CoinsReceivedEvent;
-import nodecore.miners.pop.events.ConfigurationChangedEvent;
-import nodecore.miners.pop.events.FundsAddedEvent;
-import nodecore.miners.pop.events.InfoMessageEvent;
-import nodecore.miners.pop.events.InsufficientFundsEvent;
-import nodecore.miners.pop.events.NewVeriBlockFoundEvent;
-import nodecore.miners.pop.events.NodeCoreDesynchronizedEvent;
-import nodecore.miners.pop.events.NodeCoreHealthyEvent;
-import nodecore.miners.pop.events.NodeCoreSynchronizedEvent;
-import nodecore.miners.pop.events.NodeCoreUnhealthyEvent;
-import nodecore.miners.pop.events.PoPMinerNotReadyEvent;
-import nodecore.miners.pop.events.PoPMinerReadyEvent;
-import nodecore.miners.pop.events.PoPMiningOperationCompletedEvent;
-import nodecore.miners.pop.events.WalletSeedAgreementMissingEvent;
+import nodecore.miners.pop.events.*;
 import nodecore.miners.pop.services.BitcoinService;
 import nodecore.miners.pop.services.NodeCoreService;
 import nodecore.miners.pop.services.PoPStateService;
@@ -83,7 +67,6 @@ public class PoPMiner implements Runnable {
     private final ProcessManager processManager;
 
     private boolean stopped = false;
-    private boolean autoStopped = false;
 
     private boolean stateRestored;
     private EnumSet<PoPMinerDependencies> readyConditions;
@@ -136,12 +119,18 @@ public class PoPMiner implements Runnable {
         InternalEventBus.getInstance().unregister(this);
 
         processManager.shutdown();
+        logger.info("processManager exit");
+
         bitcoinService.shutdown();
+        logger.info("bitcoinService exit");
+
         nodeCoreService.shutdown();
+        logger.info("nodeCoreService exit");
+
     }
 
     public boolean isReady() {
-        if(!isStopped() && !isAutoStopped()) {
+        if(!isStopped()) {
             return PoPMinerDependencies.SATISFIED.equals(readyConditions);
         } else {
             return false;
@@ -191,6 +180,9 @@ public class PoPMiner implements Runnable {
     }
 
     public MineResult mine(Integer blockNumber) {
+
+        logger.info("Received mine request for block {}", blockNumber);
+
         MineResult result = new MineResult();
         if (!readyToMine()) {
             result.fail();
@@ -481,6 +473,8 @@ public class PoPMiner implements Runnable {
                     .post(new InfoMessageEvent(String.format("Received pending tx '%s', pending balance: '%s'",
                             event.getTx().getHashAsString(),
                             Utility.formatBTCFriendlyString(event.getNewBalance()))));
+
+            ensureSufficientFunds();
         } catch (Exception e) {
             logger.error(e.getMessage(), e);
         }
@@ -593,6 +587,22 @@ public class PoPMiner implements Runnable {
         }
     }
 
+    @Subscribe
+    public void onNewBestBlock(NewBestBlockEvent event) {
+        try {
+
+            InternalEventBus.getInstance()
+                    .post(new InfoMessageEvent("New Best block received: " + event.getBlock().getHeight()));
+
+            InternalEventBus.getInstance()
+                    .post(new InfoMessageEvent("Available Bitcoin balance: " + Utility.formatBTCFriendlyString(bitcoinService.getBalance())));
+
+            ensureSufficientFunds();
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+        }
+    }
+
     public boolean isStopped() {
         return stopped;
     }
@@ -608,13 +618,5 @@ public class PoPMiner implements Runnable {
         }
 
         return result;
-    }
-
-    public boolean isAutoStopped() {
-        return autoStopped;
-    }
-
-    public void setAutoStopped(boolean autoStopped) {
-        this.autoStopped = autoStopped;
     }
 }

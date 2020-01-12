@@ -113,7 +113,7 @@ public class NodeCoreService {
 
     public void shutdown() throws InterruptedException {
         scheduledExecutorService.shutdown();
-        _channel.shutdown().awaitTermination(15, TimeUnit.SECONDS);
+        _channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
     }
 
     public boolean ping() {
